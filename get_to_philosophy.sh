@@ -30,12 +30,12 @@ loop () {
 print_next_item () {
 	#if philosophy or Wikipedia's main page are the last pages don't print arrow
 	if [ "${title_array[-1]}" = "Philosophy" ]; then
-		printf "\e[31m${title_array[-1]}\033[0m"
+		printf "\e[31m${title_array[-1]}\e[0m"
 		printf ' --> '
 	elif [ "${title_array[-1]}" = "Wikipedia, the free encyclopedia" ]; then
 		printf "${title_array[-1]}"
 	elif [ ${#title_array[@]} = 1 ]; then
-		printf "\e[38;5;46m${title_array[-1]}\033[0m --> "
+		printf "\e[38;5;46m${title_array[-1]}\e[0m --> "
 	else
 		printf "${title_array[-1]}"
 		printf ' --> '
@@ -86,14 +86,17 @@ qvalue=0
 svalue=0
 tvalue=0
 gvalue=0
+delete=1
 while getopts 'n:qo:s:t:gh' option; do
 	case "$option" in
 		n)	nvalue=$OPTARG;;
 		q)	qvalue=1;;
-		o)	ovalue=$OPTARG;;
+		o)	ovalue=$OPTARG
+			delete=0;;
 		s)	svalue=$OPTARG;;
 		t)	tvalue=$OPTARG;;
-		g)	gvalue=1;;
+		g)	gvalue=1
+			delete=0;;
 		h)	print_help
 			exit 0;;
 		?)	print_help
@@ -123,16 +126,8 @@ checkoutput () {
 	fi
 }
 
-#set default output file if none given; necessary for graph output
-if [ "$ovalue" ]; then
-	checkoutput
-fi
-
-if [ ! "$ovalue" ] && ([ "$gvalue = 1" ] || [ "$tvalue != 0" ]); then
-	checkoutput
-fi
-
 #main loop
+checkoutput
 for (( i=1; i<=$nvalue; i++ )); do
 	current_page=$(wget -q -O - http://en.wikipedia.org/wiki/Special:Random)
 	loop
@@ -140,7 +135,7 @@ for (( i=1; i<=$nvalue; i++ )); do
 		loop
 	done
 	if [ "$qvalue" = "0" ]; then
-		printf "${#title_array[@]} pages visited.\n"
+		printf "${#title_array[@]} pages visited\n"
 	fi
 	if [ "$ovalue" ]; then
 		printf "${#title_array[@]}" >> $ovalue
@@ -152,6 +147,12 @@ for (( i=1; i<=$nvalue; i++ )); do
 	
 	#stop looping if at final loop
 	if [ "$i" = "$nvalue" ]; then
+		totalpages=$(cat "$ovalue" | cut -d ',' -f 2- | egrep -o ',[^ ]' | wc -l)
+		average=$(printf %.2f $(echo "($totalpages+$nvalue)/$nvalue" | bc -l))
+		min=$(cat "$ovalue" | sort -n -k 1 | head -n 1 | cut -d ',' -f 1)
+		minpath=$(cat "$ovalue" | sort -n -k 1 | head -n 1 | cut -d ',' -f 2- | sed -r 's/,([^ ])/, \1/g')
+		max=$(cat "$ovalue" | sort -n -k 1 | tail -n 1 | cut -d ',' -f 1)
+		maxpath=$(cat "$ovalue" | sort -n -k 1 | tail -n 1 | cut -d ',' -f 2- | sed -r 's/,([^ ])/, \1/g')
 		#truncate page lists if truncate option set
 		if [ "$tvalue" != "0" ]; then
 			cut_numbers=$(cat $ovalue | cut -f 1 -d ',')
@@ -166,8 +167,21 @@ for (( i=1; i<=$nvalue; i++ )); do
 			else
 				echo 'Graphviz not found, try: "sudo apt install graphviz" or fix environment variable to dot.'
 			fi
-		fi
-		exit 0
+		fi	
 	fi
 	sleep $svalue
 done
+
+if [ "$qvalue" = "0" ] && [ "$nvalue" \> "1" ]; then
+	printf "\n\e[4mAverage number of pages\e[0m: $average\n"
+
+	printf "\e[4mMinimum number of pages\e[0m: $min\n"
+	printf "$minpath\n\n"
+
+	printf "\e[4mMaximum number of pages\e[0m: $max\n"
+	printf "$maxpath\n"
+fi
+
+if [ "$delete" = "1" ]; then
+	rm $ovalue
+fi

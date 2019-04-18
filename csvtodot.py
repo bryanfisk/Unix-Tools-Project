@@ -22,42 +22,6 @@ for line in data:
     two = line[index + 1].replace("\"", "").replace("-", " ").replace(".", "").replace("'", "").replace("&amp;", "and").strip()
     couple_list.append((one, two))
 
-average = sum([float(k[0]) for k in data]) / len(data)
-maximum = max([int(k[0]) for k in data])
-minimum = min([int(k[0]) for k in data])
-stdev = sqrt(sum([(int(k[0]) - average)**2 for k in data])/len(data)) 
-min_path = subprocess.check_output("egrep '^" + str(minimum) + "' " + inp + " | sed 's/^[^,]*,//' | sed 's/,/, /g'", shell = True).strip()
-min_path = min_path.decode('utf-8').split('\n')
-max_path = subprocess.check_output("egrep '^" + str(maximum) + "' " + inp + " | sed 's/^[^,]*,//' | sed 's/,/, /g'", shell = True).strip()
-max_path = max_path.decode('utf-8').split('\n')
-
-#remove duplicate number fields from min/max output strings
-def remove_dups(l):
-  if isinstance(l, list):
-    for i, path in enumerate(l):
-      index = path.find(',')
-      if path[:index].isnumeric():
-        l[i] = l[i][index + 1:]
-    return l
-  if isinstance(l, str):
-    index = l.find(',')
-    if l[:index].isnumeric():
-      return l[index + 1:]
-
-min_path = remove_dups(min_path)
-max_path = remove_dups(max_path)
-  
-
-#colors
-r = '\033[1;31;40m'
-d = '\033[0;37;40m'
-
-print(r + "An average {:.2f} +/- {:.2f} pages were visited on the way to philosophy.".format(average, stdev) + d)
-print(r + "Minimum", minimum, "pages to philosophy. (" + str(len(min_path)) + " hit(s))" + d)
-[print(r + "Start ->" + d, k) for k in min_path]
-print(r + "Maximum", maximum, "pages to philosophy. (" + str(len(max_path)) + " hit(s))" + d)
-[print(r + "Start ->" + d, k) for k in max_path]
-
 #output all edges (including duplicates)
 with open(filename + ".dot", "w") as file:
   for couple in couple_list:
