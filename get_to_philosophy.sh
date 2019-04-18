@@ -1,6 +1,8 @@
 #!/bin/bash
 
 declare -a title_array
+inlist=-1
+count_repeats=2
 
 print_help () {
 	printf -- "usage: \t$(basename $0) [-n \e[4mN\e[0m] [-q] [-o \e[4mFILE\e[0m] [-s \e[4mN\e[0m] [-t \e[4mN\e[0m] [-g]\n"
@@ -15,12 +17,13 @@ print_help () {
 #download and strip data from html
 loop () {
 	title_array=("${title_array[@]}" "$(echo "$current_page" | tr -d '\n' | egrep -o '<title.*</title>' | sed 's/<title>//' | sed 's/<\/title>//' | sed 's/ - .*$//')")
-	next_entry=$(echo "$current_page" | tr -d '\n' | sed 's/\(<table class="\)/\n\1/g' | sed 's/\(<\/table>\)/\1\n/g' | sed 's/<table class=.*//' | sed 's/\(<span\)/\n\1/g' | sed 's/\(<\/span>\)/\1\n/g' | sed 's/<span.*//' | sed 's/\(<sup\)/\n\1/g' | sed 's/\(<\/sup>\)/\1\n/g' | sed 's/<sup.*//' | tr -d '\n' | egrep -o -m 1 '<p>.*</p>' | sed 's/([^()]*)[^"]//g' | sed 's/([^()]*)[^"]//g' | egrep -o '<a href="/wiki/[^>]*>[^>]*</a>' | head -n 1 | sed 's/^<a href="\/wiki\///' | sed 's/" .*$//')
+	next_entry=$(echo "$current_page" | tr -d '\n' | sed 's/\(<table class="\)/\n\1/g' | sed 's/\(<\/table>\)/\1\n/g' | sed 's/<table class=.*//' | sed 's/\(<span\)/\n\1/g' | sed 's/\(<\/span>\)/\1\n/g' | sed 's/<span.*//' | sed 's/\(<sup\)/\n\1/g' | sed 's/\(<\/sup>\)/\1\n/g' | sed 's/<sup.*//' | tr -d '\n' | egrep -o -m 1 '<p>.*</p>' | sed 's/([^()]*)[^"]//g' | sed 's/([^()]*)[^"]//g' | sed 's/<[^>]*disambig[^>]*>//g' | egrep -o '<a href="/wiki/[^>]*>[^>]*</a>' | head -n 1 | sed 's/^<a href="\/wiki\///' | sed 's/" .*$//')
 	current_page=$(wget -q -O - http://en.wikipedia.org/wiki/$next_entry)
-	if [ "$qvalue" = "0" ]; then
+	repeat
+	if [ "$qvalue" = "0" ] && [ "$count_repeats" = 2 ]; then
 		print_next_item
 	fi
-	repeat
+	count_repeats=2
 }
 
 #print title of last page downloaded from Wikipedia
@@ -31,33 +34,50 @@ print_next_item () {
 		printf ' --> '
 	elif [ "${title_array[-1]}" = "Wikipedia, the free encyclopedia" ]; then
 		printf "${title_array[-1]}"
+	elif [ ${#title_array[@]} = 1 ]; then
+		printf "\e[38;5;46m${title_array[-1]}\033[0m --> "
 	else
 		printf "${title_array[-1]}"
 		printf ' --> '
 	fi
 }
 
-#detect repeats, Wikipedia main page and starts over if found (main page typically occurs when script gets a disambiguation page)
-repeat () {
+#check if current page is in title_array, indicating a loop
+isinlist () {
+	inlist=-1
 	for item in "${title_array[@]:0:${#title_array[@]}-1}"; do
 		if [ "${title_array[-1]}" = "$item" ]; then
-			if [ "$qvalue" = "0" ]; then
-				printf "\e[31mRepeat detected; will never reach the philosophy page.\033[0m ${#title_array[@]} pages visited.\n"
-			fi
-			title_array=()
-			next_entry=()
-			current_page=$(wget -q -O - http://en.wikipedia.org/wiki/Special:Random)
-			loop
+			inlist=1
+			break
 		elif [ "${title_array[-1]}" = "Wikipedia, the free encyclopedia" ]; then
-			if [ "$qvalue" = "0" ]; then
-				printf "\n\e[31mSomething went horribly wrong and you're on Wikipedia's main page! Randomizing new start...\033[0m\n"
-			fi
-			title_array=()
-			next_entry=()
-			current_page=$(wget -q -O - http://en.wikipedia.org/wiki/Special:Random)
-			loop
+			inlist=-2
+			break
 		fi
 	done
+}
+
+#detect repeats, Wikipedia main page and starts over if found (main page typically occurs when script gets a disambiguation page)
+repeat () {
+	isinlist
+	if [ $inlist -gt -1 ]; then
+		if [ "$qvalue" = "0" ]; then
+			printf "\e[33mRepeat detected; using next link in page\e[0m --> "
+		fi
+		next_entry=$(echo "$current_page" | tr -d '\n' | sed 's/\(<table class="\)/\n\1/g' | sed 's/\(<\/table>\)/\1\n/g' | sed 's/<table class=.*//' | sed 's/\(<span\)/\n\1/g' | sed 's/\(<\/span>\)/\1\n/g' | sed 's/<span.*//' | sed 's/\(<sup\)/\n\1/g' | sed 's/\(<\/sup>\)/\1\n/g' | sed 's/<sup.*//' | tr -d '\n' | egrep -o -m 1 '<p>.*</p>' | sed 's/([^()]*)[^"]//g' | sed 's/([^()]*)[^"]//g' | sed 's/<[^>]*disambig[^>]*>//g' | egrep -o '<a href="/wiki/[^>]*>[^>]*</a>' | head -n $count_repeats | tail -n 1 | sed 's/^<a href="\/wiki\///' | sed 's/" .*$//')
+		current_page=$(wget -q -O - http://en.wikipedia.org/wiki/$next_entry)
+		count_repeats=$((count_repeats+1))
+		title_array=("${title_array[@]:0:${#title_array[@]}-1}")
+		repeat
+		loop
+	elif [ $inlist = -2 ]; then
+		if [ "$qvalue" = "0" ]; then
+			printf "\e[31mSomething went horribly wrong and you're on Wikipedia's main page! Randomizing new start...\033[0m\n"
+		fi
+		title_array=()
+		next_entry=()
+		current_page=$(wget -q -O - http://en.wikipedia.org/wiki/Special:Random)
+		loop
+	fi
 }
 
 #parse command line options
@@ -83,9 +103,33 @@ while getopts 'n:qo:s:t:gh' option; do
 	esac
 done
 
+#check to see if output exists; if yes: make new output
+checkoutput () {
+	declare -i count=1
+
+	if [ ! $ovalue  ]; then
+		ovalue="output.csv"
+	fi
+
+	filename=$(echo $ovalue | cut -f 1 -d '.')
+	filetype=$(echo $ovalue | cut -f 2 -d '.')
+
+	while [ -e $filename$count.$filetype ]; do
+			count=$count+1
+	done
+
+	if [ $ovalue ] && [ -e $ovalue ]; then	
+		ovalue="$filename$count.$filetype"
+	fi
+}
+
 #set default output file if none given; necessary for graph output
-if ! [ "$ovalue" ] && ([ "$gvalue" = "1" ] || [ "$tvalue" != 0 ]); then
-	ovalue="output.txt"
+if [ "$ovalue" ]; then
+	checkoutput
+fi
+
+if [ ! "$ovalue" ] && ([ "$gvalue = 1" ] || [ "$tvalue != 0" ]); then
+	checkoutput
 fi
 
 #main loop
@@ -117,7 +161,11 @@ for (( i=1; i<=$nvalue; i++ )); do
 		fi
 		#call python graphing script if -g option present
 		if [ "$gvalue" = "1" ]; then
-			python3 csvtodot.py $ovalue
+			if [ $(command -v dot) ]; then
+				python3 csvtodot.py $ovalue
+			else
+				echo 'Graphviz not found, try: "sudo apt install graphviz" or fix environment variable to dot.'
+			fi
 		fi
 		exit 0
 	fi
