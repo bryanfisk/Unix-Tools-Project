@@ -95,8 +95,7 @@ while getopts 'n:qo:s:t:gh' option; do
 			delete=0;;
 		s)	svalue=$OPTARG;;
 		t)	tvalue=$OPTARG;;
-		g)	gvalue=1
-			delete=0;;
+		g)	gvalue=1;;
 		h)	print_help
 			exit 0;;
 		?)	print_help
@@ -184,4 +183,7 @@ fi
 
 if [ "$delete" = "1" ]; then
 	rm $ovalue
+	if [ -e ${ovalue%.*} ]; then
+		rm ${ovalue%.*}
+	fi
 fi
