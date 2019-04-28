@@ -76,6 +76,7 @@ repeat () {
 		title_array=()
 		next_entry=()
 		current_page=$(wget -q -O - http://en.wikipedia.org/wiki/Special:Random)
+		count_repeats=3
 		loop
 	fi
 }
